@@ -19,7 +19,7 @@ pipeline {
         )
         choice(
             name: 'ROLL_BACK',
-            choices: ['specific', 'previous'],
+            choices: ['specific', 'previous','none'],
             description: 'Select rollback strategy'
         )
     }
