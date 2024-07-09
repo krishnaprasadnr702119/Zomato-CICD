@@ -30,12 +30,22 @@ pipeline {
         }
         
         stage('Checkout from Git') {
+            when {
+                expression {
+                    params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip checkout for develop and main branches
+                }
+            }
             steps {
                 git branch: "${params.BRANCH_NAME}", url: 'https://github.com/krishnaprasadnr702119/Zomato-CICD.git'
             }
         }
         
         stage("Sonarqube Analysis") {
+            when {
+                expression {
+                    params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip SonarQube analysis for develop and main branches
+                }
+            }
             steps {
                 withSonarQubeEnv('sonar-server') {
                     sh """$SCANNER_HOME/bin/sonar-scanner \
@@ -67,6 +77,16 @@ pipeline {
         }
         
         stage("Docker Build & Push") {
+            when {
+                allOf {
+                    expression {
+                        params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip Docker build for develop and main branches
+                    }
+                    expression {
+                        currentBuild.rawBuild.getLog(Integer.MAX_VALUE).contains("Files already committed")
+                    }
+                }
+            }
             steps {
                 script {
                     def version = versioning(params.DEPLOY_ENV)
@@ -87,6 +107,11 @@ pipeline {
         }
         
         stage("Trivy Image Scan") {
+            when {
+                expression {
+                    params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip Trivy scan for develop and main branches
+                }
+            }
             steps {
                 script {
                     def version = versioning(params.DEPLOY_ENV)
@@ -99,6 +124,19 @@ pipeline {
         }
         
         stage('Deploy to Container') {
+            when {
+                allOf {
+                    expression {
+                        params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip deployment for develop and main branches
+                    }
+                    expression {
+                        currentBuild.rawBuild.getLog(Integer.MAX_VALUE).contains("Files already committed")
+                    }
+                    expression {
+                        params.DEPLOY_ENV in ['dev', 'staging', 'uat', 'production']  // Only deploy for selected environments
+                    }
+                }
+            }
             steps {
                 script {
                     def version = versioning(params.DEPLOY_ENV)
