@@ -32,7 +32,7 @@ pipeline {
         stage('Checkout from Git') {
             when {
                 expression {
-                    params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip checkout for develop and main branches
+                    params.BRANCH_NAME != 'develop'  // Skip checkout for develop branch
                 }
             }
             steps {
@@ -43,7 +43,7 @@ pipeline {
         stage("Sonarqube Analysis") {
             when {
                 expression {
-                    params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip SonarQube analysis for develop and main branches
+                    params.BRANCH_NAME != 'develop'  // Skip SonarQube analysis for develop branch
                 }
             }
             steps {
@@ -80,10 +80,10 @@ pipeline {
             when {
                 allOf {
                     expression {
-                        params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip Docker build for develop and main branches
+                        params.BRANCH_NAME != 'develop'  // Skip Docker build for develop branch
                     }
                     expression {
-                        currentBuild.rawBuild.getLog(Integer.MAX_VALUE).contains("Files already committed")
+                        params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'uat' || params.DEPLOY_ENV == 'production'
                     }
                 }
             }
@@ -108,8 +108,13 @@ pipeline {
         
         stage("Trivy Image Scan") {
             when {
-                expression {
-                    params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip Trivy scan for develop and main branches
+                allOf {
+                    expression {
+                        params.BRANCH_NAME != 'develop'  // Skip Trivy scan for develop branch
+                    }
+                    expression {
+                        params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'uat' || params.DEPLOY_ENV == 'production'
+                    }
                 }
             }
             steps {
@@ -127,13 +132,10 @@ pipeline {
             when {
                 allOf {
                     expression {
-                        params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  // Skip deployment for develop and main branches
+                        params.BRANCH_NAME != 'develop'  // Skip deployment for develop branch
                     }
                     expression {
-                        currentBuild.rawBuild.getLog(Integer.MAX_VALUE).contains("Files already committed")
-                    }
-                    expression {
-                        params.DEPLOY_ENV in ['dev', 'staging', 'uat', 'production']  // Only deploy for selected environments
+                        params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'uat' || params.DEPLOY_ENV == 'production'
                     }
                 }
             }
@@ -170,16 +172,6 @@ pipeline {
                         """
                     }
                 }
-            }
-        }
-    }
-    
-    post {
-        always {
-            script {
-                echo "Cleaning up old Docker containers and images."
-                sh "docker container prune -f"
-                sh "docker image prune -f"
             }
         }
     }
