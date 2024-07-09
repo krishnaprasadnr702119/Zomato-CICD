@@ -108,16 +108,16 @@ pipeline {
                     // Determine server based on DEPLOY_ENV
                     switch (params.DEPLOY_ENV) {
                         case 'dev':
-                            server = 'dev-server-ip'
+                            server = '192.168.1.71'
                             break
                         case 'staging':
-                            server = 'staging-server-ip'
+                            server = '192.168.1.71'
                             break
                         case 'uat':
-                            server = 'uat-server-ip'
+                            server = '192.168.1.71'
                             break
                         case 'production':
-                            server = 'production-server-ip'
+                            server = '192.168.1.71'
                             break
                         default:
                             echo "Unknown DEPLOY_ENV"
@@ -126,7 +126,7 @@ pipeline {
                     }
                     
                     // Deploy to server using SSH credentials
-                    withCredentials([usernamePassword(credentialsId: "ssh-credentials-id-for-${params.DEPLOY_ENV}", usernameVariable: 'SSH_USER', passwordVariable: 'SSH_PASSWORD')]) {
+                    withCredentials([usernamePassword(credentialsId: "inapp${params.DEPLOY_ENV}", usernameVariable: 'SSH_USER', passwordVariable: 'SSH_PASSWORD')]) {
                         sh """
                         sshpass -p '${SSH_PASSWORD}' ssh ${SSH_USER}@${server} 'docker stop zomato && docker rm zomato && docker pull krishnaprasadnr/zomato:${dockerTag} && docker run -d --name zomato -p 3000:3000 krishnaprasadnr/zomato:${dockerTag}'
                         """
