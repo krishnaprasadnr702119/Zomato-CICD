@@ -12,6 +12,16 @@ pipeline {
             choices: ['main', 'develop', 'feature', 'bugfix'],
             description: 'Select the branch to build'
         )
+        choice(
+            name: 'DEPLOY_ENV',
+            choices: ['dev', 'staging', 'uat', 'production'],
+            description: 'Select the deployment environment'
+        )
+        choice(
+            name: 'ROLL_BACK',
+            choices: ['specific', 'previous'],
+            description: 'Select rollback strategy'
+        )
     }
     stages {
         stage('Clean Workspace') {
@@ -21,7 +31,7 @@ pipeline {
         }
         stage('Checkout from Git') {
             steps {
-                git branch: "${params.BRANCH_NAME}", url: 'https://github.com/krishnaprasadnr702119/Zomato-CICD.git'
+                git branch: "${params.BRANCH_NAME}", url: 'https://github.com/krishnaprasadnr702119/Zomato.git'
             }
         }
         stage("Sonarqube Analysis") {
@@ -58,22 +68,29 @@ pipeline {
         stage("Docker Build & Push") {
             steps {
                 script {
+                    def version = versioning(params.DEPLOY_ENV)
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh "docker build -t zomato ."
-                        sh "docker tag zomato krishnaprasadnr/zomato:${params.BRANCH_NAME}"
-                        sh "docker push krishnaprasadnr/zomato:${params.BRANCH_NAME}"
+                        sh "docker build -t zomato:${version} ."
+                        sh "docker tag zomato:${version} krishnaprasadnr/zomato:${params.BRANCH_NAME}-${params.DEPLOY_ENV}-${version}"
+                        sh "docker push krishnaprasadnr/zomato:${params.BRANCH_NAME}-${params.DEPLOY_ENV}-${version}"
                     }
                 }
             }
         }
         stage("Trivy Image Scan") {
             steps {
-                sh "trivy image krishnaprasadnr/zomato:${params.BRANCH_NAME} > trivy.txt"
+                script {
+                    def version = versioning(params.DEPLOY_ENV)
+                    sh "trivy image krishnaprasadnr/zomato:${params.BRANCH_NAME}-${params.DEPLOY_ENV}-${version} > trivy.txt"
+                }
             }
         }
         stage('Deploy to Container') {
             steps {
-                sh "docker run -d --name zomato -p 3000:3000 krishnaprasadnr/zomato:${params.BRANCH_NAME}"
+                script {
+                    def version = versioning(params.DEPLOY_ENV)
+                    sh "docker run -d --name zomato -p 3000:3000 krishnaprasadnr/zomato:${params.BRANCH_NAME}-${params.DEPLOY_ENV}-${version}"
+                }
             }
         }
     }
@@ -81,7 +98,12 @@ pipeline {
         failure {
             script {
                 echo "Deployment failed. Rolling back to the previous version."
-                sh "docker run -d --name zomato -p 3000:3000 krishnaprasadnr/zomato:previous"
+                if (params.ROLL_BACK == 'previous') {
+                    sh "docker run -d --name zomato -p 3000:3000 krishnaprasadnr/zomato:previous"
+                } else if (params.ROLL_BACK == 'specific') {
+                    input message: 'Please provide the version to roll back to', parameters: [string(name: 'ROLLBACK_VERSION', defaultValue: '', description: 'Version to roll back to')]
+                    sh "docker run -d --name zomato -p 3000:3000 krishnaprasadnr/zomato:${ROLLBACK_VERSION}"
+                }
             }
         }
         always {
