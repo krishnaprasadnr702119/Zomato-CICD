@@ -32,7 +32,7 @@ pipeline {
         stage('Checkout from Git') {
             when {
                 expression {
-                    params.BRANCH_NAME != 'develop'  // Skip checkout for develop branch
+                    params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  
                 }
             }
             steps {
@@ -43,7 +43,7 @@ pipeline {
         stage("Sonarqube Analysis") {
             when {
                 expression {
-                    params.BRANCH_NAME != 'develop'  // Skip SonarQube analysis for develop branch
+                    params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main' 
                 }
             }
             steps {
@@ -80,16 +80,13 @@ pipeline {
             when {
                 allOf {
                     expression {
-                        params.BRANCH_NAME != 'develop'  // Skip Docker build for develop branch
-                    }
-                    expression {
-                        params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'uat' || params.DEPLOY_ENV == 'production'
+                        params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  
                     }
                 }
             }
             steps {
                 script {
-                    def version = versioning(params.DEPLOY_ENV)
+                    def version = env.BUILD_NUMBER 
                     def dockerTag = "${params.BRANCH_NAME}-${params.DEPLOY_ENV}-${version}"
                     
                     // Building Docker image
@@ -108,21 +105,15 @@ pipeline {
         
         stage("Trivy Image Scan") {
             when {
-                allOf {
-                    expression {
-                        params.BRANCH_NAME != 'develop'  // Skip Trivy scan for develop branch
-                    }
-                    expression {
-                        params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'uat' || params.DEPLOY_ENV == 'production'
-                    }
+                expression {
+                    params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main' 
                 }
             }
             steps {
                 script {
-                    def version = versioning(params.DEPLOY_ENV)
+                    def version = env.BUILD_NUMBER
                     def dockerTag = "${params.BRANCH_NAME}-${params.DEPLOY_ENV}-${version}"
                     
-                    // Scanning Docker image
                     sh "trivy image krishnaprasadnr/zomato:${dockerTag} > trivy.txt"
                 }
             }
@@ -132,45 +123,19 @@ pipeline {
             when {
                 allOf {
                     expression {
-                        params.BRANCH_NAME != 'develop'  // Skip deployment for develop branch
+                        params.BRANCH_NAME != 'develop' && params.BRANCH_NAME != 'main'  
                     }
                     expression {
-                        params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'uat' || params.DEPLOY_ENV == 'production'
+                        params.DEPLOY_ENV in ['dev', 'staging', 'uat', 'production']  
                     }
                 }
             }
             steps {
                 script {
-                    def version = versioning(params.DEPLOY_ENV)
+                    def version = env.BUILD_NUMBER
                     def dockerTag = "${params.BRANCH_NAME}-${params.DEPLOY_ENV}-${version}"
-                    def server
                     
-                    // Determine server based on DEPLOY_ENV
-                    switch (params.DEPLOY_ENV) {
-                        case 'dev':
-                            server = '192.168.1.71'
-                            break
-                        case 'staging':
-                            server = '192.168.1.71'
-                            break
-                        case 'uat':
-                            server = '192.168.1.71'
-                            break
-                        case 'production':
-                            server = '192.168.1.71'
-                            break
-                        default:
-                            echo "Unknown DEPLOY_ENV"
-                            currentBuild.result = 'FAILURE'
-                            return
-                    }
-                    
-                    // Deploy to server using SSH credentials
-                    withCredentials([usernamePassword(credentialsId: "inapp${params.DEPLOY_ENV}", usernameVariable: 'SSH_USER', passwordVariable: 'SSH_PASSWORD')]) {
-                        sh """
-                        sshpass -p '${SSH_PASSWORD}' ssh ${SSH_USER}@${server} 'docker stop zomato && docker rm zomato && docker pull krishnaprasadnr/zomato:${dockerTag} && docker run -d --name zomato -p 3000:3000 krishnaprasadnr/zomato:${dockerTag}'
-                        """
-                    }
+                    sh "docker run -d --name zomato-${params.DEPLOY_ENV} -p 8080:80 krishnaprasadnr/zomato:${dockerTag}"
                 }
             }
         }
